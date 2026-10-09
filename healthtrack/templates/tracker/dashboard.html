@@ -1,0 +1,134 @@
+{% extends 'tracker/base.html' %}
+{% block content %}
+
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+  <h1 class="h3 mb-0">Мои измерения</h1>
+  <div class="d-flex gap-2">
+    <a href="{% url 'export_csv' %}" class="btn btn-outline-secondary">
+      <i class="bi bi-download"></i> CSV
+    </a>
+    <a href="{% url 'measurement_add' %}" class="btn btn-primary">
+      <i class="bi bi-plus-lg"></i> Добавить
+    </a>
+  </div>
+</div>
+
+{% if danger_count %}
+  <div class="alert alert-danger">
+    ⚠ За выбранный период <strong>{{ danger_count }}</strong> измерений с повышенным давлением.
+  </div>
+{% endif %}
+
+<form class="row g-2 mb-4" method="get">
+  <div class="col-12 col-md-4">
+    <label class="form-label small mb-1">С даты</label>
+    <input type="date" name="date_from" value="{{ date_from }}" class="form-control">
+  </div>
+  <div class="col-12 col-md-4">
+    <label class="form-label small mb-1">По дату</label>
+    <input type="date" name="date_to" value="{{ date_to }}" class="form-control">
+  </div>
+  <div class="col-12 col-md-4 d-flex align-items-end gap-2">
+    <button class="btn btn-primary flex-grow-1">Применить</button>
+    <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary">Сброс</a>
+  </div>
+</form>
+
+<div class="card mb-4">
+  <div class="card-body">
+    <h5 class="card-title mb-3">Динамика давления</h5>
+    <canvas id="bpChart" height="90"></canvas>
+    <hr>
+    <h5 class="card-title mb-3">Пульс</h5>
+    <canvas id="pulseChart" height="60"></canvas>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body p-0">
+    {% if measurements %}
+      <div class="table-responsive d-none d-md-block">
+        <table class="table table-hover mb-0 align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>Дата</th><th>АД</th><th>Пульс</th><th>Заметка</th><th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for m in measurements %}
+              <tr class="{% if m.is_hypertensive %}table-danger{% elif m.is_pulse_abnormal %}table-warning{% endif %}">
+                <td>{{ m.measured_at|date:"d.m.Y H:i" }}</td>
+                <td><strong>{{ m.systolic }}/{{ m.diastolic }}</strong>
+                  {% if m.is_hypertensive %}<i class="bi bi-exclamation-triangle-fill text-danger"></i>{% endif %}
+                </td>
+                <td>{{ m.pulse }}</td>
+                <td class="text-truncate" style="max-width:240px">{{ m.note }}</td>
+                <td class="text-end">
+                  <a href="{% url 'measurement_delete' m.pk %}" class="btn btn-sm btn-outline-danger"
+                     onclick="return confirm('Удалить?')"><i class="bi bi-trash"></i></a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="d-md-none">
+        {% for m in measurements %}
+          <div class="border-bottom p-3 {% if m.is_hypertensive %}bg-danger-subtle{% elif m.is_pulse_abnormal %}bg-warning-subtle{% endif %}">
+            <div class="d-flex justify-content-between">
+              <strong>{{ m.systolic }}/{{ m.diastolic }}</strong>
+              <small class="text-muted">{{ m.measured_at|date:"d.m.Y H:i" }}</small>
+            </div>
+            <div>Пульс: {{ m.pulse }}</div>
+            {% if m.note %}<div class="small text-muted">{{ m.note }}</div>{% endif %}
+            <a href="{% url 'measurement_delete' m.pk %}" class="btn btn-sm btn-outline-danger mt-2"
+               onclick="return confirm('Удалить?')">Удалить</a>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="text-center p-5 text-muted">
+        <p>Пока нет измерений.</p>
+        <a href="{% url 'measurement_add' %}" class="btn btn-primary">Добавить первое</a>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+{{ chart_data|json_script:"chart-data" }}
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const chartData = JSON.parse(document.getElementById('chart-data').textContent);
+
+  new Chart(document.getElementById('bpChart'), {
+    type: 'line',
+    data: {
+      labels: chartData.labels,
+      datasets: [
+        { label: 'Верхнее', data: chartData.systolic, borderColor: '#dc3545',
+          backgroundColor: 'rgba(220,53,69,.1)', tension: .3, fill: false },
+        { label: 'Нижнее', data: chartData.diastolic, borderColor: '#0d6efd',
+          backgroundColor: 'rgba(13,110,253,.1)', tension: .3, fill: false },
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { position: 'bottom' } },
+      scales: { y: { beginAtZero: false, suggestedMin: 60, suggestedMax: 160 } }
+    }
+  });
+
+  new Chart(document.getElementById('pulseChart'), {
+    type: 'line',
+    data: {
+      labels: chartData.labels,
+      datasets: [{ label: 'Пульс', data: chartData.pulse,
+        borderColor: '#198754', tension: .3, fill: false }]
+    },
+    options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+  });
+</script>
+{% endblock %}
